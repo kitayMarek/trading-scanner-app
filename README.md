@@ -1,6 +1,9 @@
 # Trading Scanner App - Antigravity Strategy v2.0
 
-🚀 Professional trend-following trading strategy analyzer with technical indicators, market regime detection, and risk management tools.
+
+
+🚀 Professional trend-foll<img width="1575" height="931" alt="Skaner tradera" src="https://github.com/user-attachments/assets/92d4f8ea-e96f-4f8f-866d-108e1c5925ca" />
+owing trading strategy analyzer with technical indicators, market regime detection, and risk management tools.
 
 ![Version](https://img.shields.io/badge/version-2.0.1-blue)
 ![Tests](https://img.shields.io/badge/tests-76%20passing-success)
