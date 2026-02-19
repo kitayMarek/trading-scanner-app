@@ -1,8 +1,8 @@
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QFrame, QMessageBox, QInputDialog,
-    QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea
+    QProgressBar, QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea, QApplication
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QColor
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -20,8 +20,10 @@ class PanelStartowy(QWidget):
     def __init__(self):
         super().__init__()
         self.repo = RepozytoriumDanych()
+        self.data_loaded = False  # Track if data has been loaded
         self.inicjalizuj_ui()
-        self.odswiez_dane()
+        # Lazy load - defer data loading to allow UI to render first
+        QTimer.singleShot(100, self.lazy_load_data)
         
     def inicjalizuj_ui(self):
         uklad = QVBoxLayout()
@@ -107,10 +109,43 @@ class PanelStartowy(QWidget):
         uklad_przyciskow.addWidget(btn_import_yf)
 
         uklad.addLayout(uklad_przyciskow)
+
+        # ===== PROGRESS BAR =====
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0)  # Indeterminate (spinning)
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setMaximumHeight(16)
+        self.progress_bar.setTextVisible(False)
+        uklad.addWidget(self.progress_bar)
+
+        self.lbl_status = QLabel("")
+        self.lbl_status.setStyleSheet("color: #666; font-size: 11px; padding: 2px;")
+        self.lbl_status.setVisible(False)
+        uklad.addWidget(self.lbl_status)
+
         uklad.addStretch()
         self.setLayout(uklad)
-        
+
+    def lazy_load_data(self):
+        """Load data on first view - called by timer to allow UI to render first"""
+        if not self.data_loaded:
+            self.odswiez_dane()
+            self.data_loaded = True
+
+    def _show_progress(self, message: str):
+        """Show progress bar with status message"""
+        self.progress_bar.setVisible(True)
+        self.lbl_status.setText(message)
+        self.lbl_status.setVisible(True)
+        QApplication.processEvents()
+
+    def _hide_progress(self):
+        """Hide progress bar"""
+        self.progress_bar.setVisible(False)
+        self.lbl_status.setVisible(False)
+
     def odswiez_dane(self):
+        self._show_progress("Ładowanie danych benchmarku...")
         try:
             benchmark = Konfiguracja.TYKER_BENCHMARK
             df_bench = self.repo.pobierz_swiece_df(benchmark)
@@ -122,6 +157,7 @@ class PanelStartowy(QWidget):
                     self.badge_regime.setText("NO DATA")
                     self.badge_regime.setStyleSheet("font-size: 18px; font-weight: bold; color: white; background-color: gray; padding: 5px;")
                     self.lbl_regime_desc.setText("Brak danych w bazie. Pobierz dane dla co najmniej jednej spółki.")
+                    self._hide_progress()
                     return
 
                 # Użyj pierwszego dostępnego tykera jako benchmark
@@ -131,9 +167,11 @@ class PanelStartowy(QWidget):
                 if df_bench.empty:
                     self.badge_regime.setText("NO DATA")
                     self.badge_regime.setStyleSheet("font-size: 18px; font-weight: bold; color: white; background-color: gray; padding: 5px;")
+                    self._hide_progress()
                     return
 
             # ===== 1. MARKET REGIME v2.0 (with badge) =====
+            self._show_progress("Wykrywanie reżimu rynkowego...")
             regime, desc = SilnikRezimu.detect_regime(df_bench)
 
             regime_text = regime.value
@@ -156,8 +194,10 @@ class PanelStartowy(QWidget):
 
             # ===== 2. GET DATA FOR ALL TICKERS =====
             tykery = self.repo.pobierz_wszystkie_tykery()
+            self._show_progress(f"Ładowanie danych dla {len(tykery)} spółek...")
             dane_map = {}
-            for t in tykery:
+            for i, t in enumerate(tykery):
+                self._show_progress(f"Ładowanie danych ({i+1}/{len(tykery)}): {t}")
                 df = self.repo.pobierz_swiece_df(t)
                 if not df.empty:
                     dane_map[t] = df
@@ -166,9 +206,11 @@ class PanelStartowy(QWidget):
                 self.badge_regime.setText("WAITING")
                 self.badge_regime.setStyleSheet("font-size: 18px; font-weight: bold; color: white; background-color: #ff9900; padding: 5px;")
                 self.lbl_regime_desc.setText("Pobieranie danych w toku. Dodaj spółki i kliknij 'Download Data'.")
+                self._hide_progress()
                 return
 
             # ===== 3. GENERATE RANKING (v2.0 with Composite Score) =====
+            self._show_progress(f"Obliczanie rankingu dla {len(dane_map)} spółek...")
             ranking_df = RankingEngine.generuj_ranking(dane_map, df_bench)
 
             # ===== 4. POPULATE TOP 5 TIER A =====
@@ -195,6 +237,8 @@ class PanelStartowy(QWidget):
             QMessageBox.critical(self, "Error", str(e))
             import traceback
             traceback.print_exc()
+        finally:
+            self._hide_progress()
 
     def wypelnij_top5(self, ranking_df):
         """Populuje tabelę Top 5 Tier A setupów z Status=TRADEABLE (v2.1)"""
@@ -265,10 +309,12 @@ class PanelStartowy(QWidget):
     def pobierz_yf(self):
         tyker, ok = QInputDialog.getText(self, "Pobieranie Danych", "Podaj symbol tickera (np. SPY, AAPL):")
         if ok and tyker:
+            tyker_clean = tyker.upper().strip()
+            self._show_progress(f"Pobieranie danych dla {tyker_clean} z Yahoo Finance...")
             try:
-                tyker_clean = tyker.upper().strip()
                 swiece = ImporterDanych.pobierz_yfinance(tyker_clean)
                 if swiece:
+                    self._show_progress(f"Zapisywanie {len(swiece)} świec dla {tyker_clean}...")
                     self.repo.zapisz_swiece(swiece)
                     self.odswiez_dane()
                     QMessageBox.information(self, "Sukces", f"Pobrano {len(swiece)} świec dla {tyker_clean}. Panel został odświeżony.")
@@ -276,3 +322,5 @@ class PanelStartowy(QWidget):
                     QMessageBox.warning(self, "Brak Danych", f"Nie udało się pobrać danych dla {tyker_clean}. Sprawdź symbol tickera.")
             except Exception as e:
                 QMessageBox.critical(self, "Błąd", f"Błąd pobierania danych: {str(e)}")
+            finally:
+                self._hide_progress()

@@ -39,6 +39,36 @@ class RepozytoriumDanych:
         c.execute("SELECT DISTINCT tyker FROM swiece ORDER BY tyker")
         return [row[0] for row in c.fetchall()]
 
+    def pobierz_ostatnia_data(self, tyker: str) -> str:
+        """Get the most recent date for a ticker in the database
+
+        Args:
+            tyker: Stock symbol
+
+        Returns:
+            Latest date as string (YYYY-MM-DD format) or None if ticker not found
+        """
+        conn = self.db.pobierz_polaczenie()
+        c = conn.cursor()
+        c.execute("SELECT MAX(data) FROM swiece WHERE tyker = ?", (tyker,))
+        result = c.fetchone()
+        return result[0] if result and result[0] else None
+
+    def czy_ticker_istnieje(self, tyker: str) -> bool:
+        """Check if ticker exists in database
+
+        Args:
+            tyker: Stock symbol
+
+        Returns:
+            True if ticker has any data in database
+        """
+        conn = self.db.pobierz_polaczenie()
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM swiece WHERE tyker = ?", (tyker,))
+        count = c.fetchone()[0]
+        return count > 0
+
     def usun_dane_tykera(self, tyker: str):
         """Delete all candle data for a specific ticker from database"""
         conn = self.db.pobierz_polaczenie()
@@ -108,4 +138,47 @@ class RepozytoriumDanych:
         """Delete transaction from database"""
         conn = self.db.pobierz_polaczenie()
         conn.execute("DELETE FROM transakcje WHERE id = ?", (transaction_id,))
+        conn.commit()
+
+    # ───────────────────────────────────────────────────
+    #   Notatki skanera (priorytet 0-9 + opcjonalna notatka)
+    # ───────────────────────────────────────────────────
+
+    def pobierz_notatki_skanera(self) -> dict:
+        """
+        Pobierz wszystkie notatki skanera.
+
+        Returns:
+            dict {tyker: {'priorytet': int, 'notatka': str}}
+        """
+        conn = self.db.pobierz_polaczenie()
+        c = conn.cursor()
+        c.execute("SELECT tyker, priorytet, notatka FROM notatki_skanera")
+        rows = c.fetchall()
+        return {row[0]: {'priorytet': row[1], 'notatka': row[2] or ''} for row in rows}
+
+    def zapisz_notatke_skanera(self, tyker: str, priorytet: int, notatka: str = ''):
+        """
+        Zapisz lub zaktualizuj priorytet i notatkę dla tykera.
+
+        Args:
+            tyker: Symbol akcji
+            priorytet: Wartość 0-9
+            notatka: Opcjonalny tekst (domyślnie pusty)
+        """
+        conn = self.db.pobierz_polaczenie()
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO notatki_skanera (tyker, priorytet, notatka)
+            VALUES (?, ?, ?)
+            ON CONFLICT(tyker) DO UPDATE SET
+                priorytet = excluded.priorytet,
+                notatka   = excluded.notatka
+        ''', (tyker, max(0, min(9, priorytet)), notatka))
+        conn.commit()
+
+    def usun_notatke_skanera(self, tyker: str):
+        """Usuń notatkę dla tykera (np. przy usuwaniu spółki)."""
+        conn = self.db.pobierz_polaczenie()
+        conn.execute("DELETE FROM notatki_skanera WHERE tyker = ?", (tyker,))
         conn.commit()

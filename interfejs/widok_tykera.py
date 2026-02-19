@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QFrame
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCheckBox, QFrame, QProgressBar, QApplication
 )
+from PySide6.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.dates as mdates
@@ -18,9 +19,24 @@ class WidokTykera(QWidget):
         
     def inicjalizuj_ui(self):
         uklad = QHBoxLayout()
-        
+
         # Lewa: Wykres
         uklad_wykresu = QVBoxLayout()
+
+        # Progress bar (indeterminate, hidden by default)
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 0)  # Indeterminate
+        self.progress_bar.setMaximumHeight(14)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setVisible(False)
+        uklad_wykresu.addWidget(self.progress_bar)
+
+        self.lbl_loading = QLabel("")
+        self.lbl_loading.setStyleSheet("color: #666; font-size: 11px; padding: 1px 0px;")
+        self.lbl_loading.setAlignment(Qt.AlignCenter)
+        self.lbl_loading.setVisible(False)
+        uklad_wykresu.addWidget(self.lbl_loading)
+
         self.rysunek = Figure()
         self.plotno = FigureCanvas(self.rysunek)
         uklad_wykresu.addWidget(self.plotno)
@@ -54,15 +70,29 @@ class WidokTykera(QWidget):
     def zaladuj_tykera(self, tyker: str):
         self.biezacy_tyker = tyker
         self.etykieta_tykera.setText(f"Analiza: {tyker}")
-        
+
+        # Show progress
+        self.progress_bar.setVisible(True)
+        self.lbl_loading.setText(f"Ładowanie danych dla {tyker}...")
+        self.lbl_loading.setVisible(True)
+        QApplication.processEvents()
+
         df = self.repo.pobierz_swiece_df(tyker)
         bench_df = self.repo.pobierz_swiece_df(Konfiguracja.TYKER_BENCHMARK)
-        
-        if df.empty: return
-        
+
+        if df.empty:
+            self.progress_bar.setVisible(False)
+            self.lbl_loading.setVisible(False)
+            return
+
         # Obliczanie wskaźników
+        self.lbl_loading.setText(f"Obliczanie wskaźników dla {tyker}...")
+        QApplication.processEvents()
         df = SilnikWskaznikow.oblicz_wskazniki(df, bench_df)
-        
+
+        self.progress_bar.setVisible(False)
+        self.lbl_loading.setVisible(False)
+
         self.rysuj_wykres(df)
         self.aktualizuj_panel(df)
         

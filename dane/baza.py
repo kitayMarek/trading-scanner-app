@@ -40,6 +40,15 @@ class BazaDanych:
         )
         ''')
 
+        # Tabela notatek skanera (uwagi / priorytety per tyker)
+        kursor.execute('''
+        CREATE TABLE IF NOT EXISTS notatki_skanera (
+            tyker TEXT PRIMARY KEY,
+            priorytet INTEGER DEFAULT 0,
+            notatka TEXT DEFAULT ''
+        )
+        ''')
+
         # Tabela transakcji
         kursor.execute('''
         CREATE TABLE IF NOT EXISTS transakcje (
