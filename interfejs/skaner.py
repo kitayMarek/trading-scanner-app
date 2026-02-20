@@ -172,7 +172,8 @@ class SkanerWidok(QWidget):
         self.tabela.setColumnWidth(12, 58)
 
         self.tabela.cellDoubleClicked.connect(self.on_dwuklik)
-        self.tabela.cellClicked.connect(self.on_pojedyncze_klikniecie)
+        # cellClicked zastąpiony przez currentRowChanged — obsługuje klik i strzałki
+        self.tabela.selectionModel().currentRowChanged.connect(self.on_row_changed)
 
         self.tabela.setSelectionBehavior(QTableWidget.SelectRows)
         self.tabela.setSelectionMode(QTableWidget.ExtendedSelection)
@@ -788,6 +789,13 @@ class SkanerWidok(QWidget):
         # Update chart and metrics
         self.rysuj_wykres(df, ticker)
         self.aktualizuj_panel(df, ticker)
+
+    def on_row_changed(self, current, previous):
+        """Handle row change (mouse click OR keyboard arrows) - update chart and metrics.
+        currentRowChanged fires only when the row actually changes, so no double-load risk."""
+        if not current.isValid():
+            return
+        self.on_pojedyncze_klikniecie(current.row(), current.column())
 
     def wypelnij_tabele(self, df, filter_status=None):
         """Populate table with ranking data (v2.2: 13 kolumn + SpinBox Uwagi)"""
