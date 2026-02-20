@@ -62,3 +62,7 @@ class Konfiguracja:
 
     # Distance Metrics (legacy - kept for old system)
     DISTANCE_PENALTY_THRESHOLD = 30  # % - jeśli cena >30% od SMA200, to penalty
+
+    # ===== BACKTESTING v1.0 =====
+    BACKTEST_KAPITAL   = 100_000.0   # Domyślny kapitał startowy (USD)
+    BACKTEST_PROWIZJA  = 0.001       # Prowizja ułamkowa (0.001 = 0.1% per trade)
